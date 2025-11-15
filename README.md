@@ -41,6 +41,7 @@ Baixei os arquivos e anexei eles no repositório! Importante ressaltar que assim
 ### Dados mínimos:
 
 **Auditoria.log:**
+
 LogEntry {timestamp = 2025-11-14 22:48:01.540010799 UTC, acao = InitLoad, detalhes = "Programa iniciado e estado carregado/inicializado.", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 22:48:11.368352278 UTC, acao = QueryFail, detalhes = "Comando invalido: add 1 caixa. Erro: Comando invalido. Formato esperado: add ID nome 10 categoria | remove ID 5 | update ID 3 | list | report | exit", status = Falha "Comando invalido: add 1 caixa. Erro: Comando invalido. Formato esperado: add ID nome 10 categoria | remove ID 5 | update ID 3 | list | report | exit"}
 LogEntry {timestamp = 2025-11-14 22:48:23.018902329 UTC, acao = Add, detalhes = "Adicionado: caixa (ID: 1, Qtd: 1)", status = Sucesso}
