@@ -37,7 +37,7 @@ O código foi dividido seguindo a separação de responsabilidades (Funções Pu
 Baixei os arquivos e anexei eles no repositório! Importante ressaltar que assim que voce escreve "exit" os arqwuivos são gerados, em seguida, se voce tentar rodar o arquivo novamente, os arquivos ficam "bloqueados", como se fosse um bug das IDEs Online, então, tive que excluir o log no cenario 1 para dar continuidade aos textes, entretanto, coloquei os dois logs (antes e o de depois) para que não haja desconfianças de conteúdos ou testes não feitos.
 
 ### Dados mínimos:
-**Auditoria.log:** 
+**Auditoria.log:**␣␣
 LogEntry {timestamp = 2025-11-14 22:48:01.540010799 UTC, acao = InitLoad, detalhes = "Programa iniciado e estado carregado/inicializado.", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 22:48:11.368352278 UTC, acao = QueryFail, detalhes = "Comando invalido: add 1 caixa. Erro: Comando invalido. Formato esperado: add ID nome 10 categoria | remove ID 5 | update ID 3 | list | report | exit", status = Falha "Comando invalido: add 1 caixa. Erro: Comando invalido. Formato esperado: add ID nome 10 categoria | remove ID 5 | update ID 3 | list | report | exit"}
 LogEntry {timestamp = 2025-11-14 22:48:23.018902329 UTC, acao = Add, detalhes = "Adicionado: caixa (ID: 1, Qtd: 1)", status = Sucesso}
