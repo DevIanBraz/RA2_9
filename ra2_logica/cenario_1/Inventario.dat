@@ -1,0 +1,1 @@
+fromList [("1",Item {itemID = "1", nome = "teste", quantidade = 2, categoria = "item"}),("2",Item {itemID = "2", nome = "teste", quantidade = 2, categoria = "item"}),("3",Item {itemID = "3", nome = "teste", quantidade = 2, categoria = "item"})]

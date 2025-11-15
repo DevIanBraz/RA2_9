@@ -1,0 +1,3 @@
+LogEntry {timestamp = 2025-11-14 23:26:18.721899096 UTC, acao = InitLoad, detalhes = "Programa iniciado e estado carregado/inicializado.", status = Sucesso}
+LogEntry {timestamp = 2025-11-14 23:26:21.753786384 UTC, acao = List, detalhes = "Listagem do inventario.", status = Sucesso}
+LogEntry {timestamp = 2025-11-14 23:29:52.401767827 UTC, acao = Exit, detalhes = "Encerrando o programa. Estado persistido na ultima operacao.", status = Sucesso}

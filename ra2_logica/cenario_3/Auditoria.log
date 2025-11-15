@@ -1,0 +1,9 @@
+LogEntry {timestamp = 2025-11-14 23:40:25.251517008 UTC, acao = InitLoad, detalhes = "Programa iniciado e estado carregado/inicializado.", status = Sucesso}
+LogEntry {timestamp = 2025-11-14 23:40:33.602602085 UTC, acao = Add, detalhes = "Adicionado: item (ID: 1, Qtd: 10)", status = Sucesso}
+LogEntry {timestamp = 2025-11-14 23:40:36.351623797 UTC, acao = List, detalhes = "Listagem do inventario.", status = Sucesso}
+LogEntry {timestamp = 2025-11-14 23:40:49.449880075 UTC, acao = Add, detalhes = "Adicionado: teclado (ID: 2, Qtd: 10)", status = Sucesso}
+LogEntry {timestamp = 2025-11-14 23:40:53.228573413 UTC, acao = List, detalhes = "Listagem do inventario.", status = Sucesso}
+LogEntry {timestamp = 2025-11-14 23:40:59.606053002 UTC, acao = Remove, detalhes = "Falha na logica: Erro: Estoque insuficiente. Item: teclado (10) < Remocao: 15 (Comando: remove 2 15)", status = Falha "Falha na logica: Erro: Estoque insuficiente. Item: teclado (10) < Remocao: 15 (Comando: remove 2 15)"}
+LogEntry {timestamp = 2025-11-14 23:41:05.233309367 UTC, acao = List, detalhes = "Listagem do inventario.", status = Sucesso}
+LogEntry {timestamp = 2025-11-14 23:41:16.26343531 UTC, acao = Report, detalhes = "Geracao de relatorio de erros.", status = Sucesso}
+LogEntry {timestamp = 2025-11-14 23:41:37.627146205 UTC, acao = Exit, detalhes = "Encerrando o programa. Estado persistido na ultima operacao.", status = Sucesso}
