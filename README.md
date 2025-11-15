@@ -60,13 +60,15 @@ LogEntry {timestamp = 2025-11-14 22:55:15.846127549 UTC, acao = Exit, detalhes =
 
 
 **Inventario.dat:** 
+
 fromList [("1",Item {itemID = "1", nome = "caixa", quantidade = 1, categoria = "item"}),("10",Item {itemID = "10", nome = "faca", quantidade = 10, categoria = "item"}),("2",Item {itemID = "2", nome = "papelao", quantidade = 2, categoria = "item"}),("3",Item {itemID = "3", nome = "arroz", quantidade = 3, categoria = "comida"}),("4",Item {itemID = "4", nome = "feijao", quantidade = 4, categoria = "feijao"}),("5",Item {itemID = "5", nome = "fenda", quantidade = 2, categoria = "item"}),("6",Item {itemID = "6", nome = "bola", quantidade = 2, categoria = "item"}),("7",Item {itemID = "7", nome = "macarrao", quantidade = 1, categoria = "comida"}),("8",Item {itemID = "8", nome = "prato", quantidade = 10, categoria = "item"}),("9",Item {itemID = "9", nome = "garfo", quantidade = 10, categoria = "item"})]
 
 ---
 
 ### Cenário 1 (antes):
 
-**Auditoria.log:** 
+**Auditoria.log:**
+
 LogEntry {timestamp = 2025-11-14 23:20:54.154979249 UTC, acao = InitLoad, detalhes = "Programa iniciado e estado carregado/inicializado.", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 23:21:07.343929348 UTC, acao = Add, detalhes = "Adicionado: teste (ID: 1, Qtd: 2)", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 23:21:13.81249363 UTC, acao = Add, detalhes = "Adicionado: teste (ID: 2, Qtd: 2)", status = Sucesso}
@@ -82,11 +84,13 @@ fromList [("1",Item {itemID = "1", nome = "teste", quantidade = 2, categoria = "
 ### Cenário 1 (depois):
 
 **Auditoria.log:**
+
 LogEntry {timestamp = 2025-11-14 23:26:18.721899096 UTC, acao = InitLoad, detalhes = "Programa iniciado e estado carregado/inicializado.", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 23:26:21.753786384 UTC, acao = List, detalhes = "Listagem do inventario.", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 23:29:52.401767827 UTC, acao = Exit, detalhes = "Encerrando o programa. Estado persistido na ultima operacao.", status = Sucesso}
 
 **Inventario.dat:** 
+
 fromList [("1",Item {itemID = "1", nome = "teste", quantidade = 2, categoria = "item"}),("2",Item {itemID = "2", nome = "teste", quantidade = 2, categoria = "item"}),("3",Item {itemID = "3", nome = "teste", quantidade = 2, categoria = "item"})]
 
 ---
@@ -94,6 +98,7 @@ fromList [("1",Item {itemID = "1", nome = "teste", quantidade = 2, categoria = "
 ### Cenário 2:
 
 **Auditoria.log:**
+
 LogEntry {timestamp = 2025-11-14 23:40:25.251517008 UTC, acao = InitLoad, detalhes = "Programa iniciado e estado carregado/inicializado.", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 23:40:33.602602085 UTC, acao = Add, detalhes = "Adicionado: item (ID: 1, Qtd: 10)", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 23:40:36.351623797 UTC, acao = List, detalhes = "Listagem do inventario.", status = Sucesso}
@@ -105,6 +110,7 @@ LogEntry {timestamp = 2025-11-14 23:41:16.26343531 UTC, acao = Report, detalhes 
 LogEntry {timestamp = 2025-11-14 23:41:37.627146205 UTC, acao = Exit, detalhes = "Encerrando o programa. Estado persistido na ultima operacao.", status = Sucesso}
 
 **Inventario.dat:** 
+
 fromList [("1",Item {itemID = "1", nome = "item", quantidade = 10, categoria = "item"}),("2",Item {itemID = "2", nome = "teclado", quantidade = 10, categoria = "item"})]
 
 ---
@@ -112,6 +118,7 @@ fromList [("1",Item {itemID = "1", nome = "item", quantidade = 10, categoria = "
 ### Cenário 3:
 
 **Auditoria.log:**
+
 LogEntry {timestamp = 2025-11-14 23:40:25.251517008 UTC, acao = InitLoad, detalhes = "Programa iniciado e estado carregado/inicializado.", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 23:40:33.602602085 UTC, acao = Add, detalhes = "Adicionado: item (ID: 1, Qtd: 10)", status = Sucesso}
 LogEntry {timestamp = 2025-11-14 23:40:36.351623797 UTC, acao = List, detalhes = "Listagem do inventario.", status = Sucesso}
@@ -124,6 +131,7 @@ LogEntry {timestamp = 2025-11-14 23:41:37.627146205 UTC, acao = Exit, detalhes =
 
 
 **Inventario.dat:** 
+
 fromList [("1",Item {itemID = "1", nome = "item", quantidade = 10, categoria = "item"}),("2",Item {itemID = "2", nome = "teclado", quantidade = 10, categoria = "item"})]
 
 
