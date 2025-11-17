@@ -3,312 +3,300 @@ module Main where
 import Data.List (find)
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Time (getCurrentTime, UTCTime)
-import Control.Exception (catch, SomeException)
-import System.IO (hPutStrLn, stderr, appendFile, readFile, writeFile)
+import Data.Time (UTCTime, getCurrentTime, defaultTimeLocale, formatTime)
+import Control.Exception (catch, SomeException(..))
+import System.IO (hPutStrLn, stderr)
 import Data.Bifunctor (first)
 
--- Constantes para arquivos de persistência
+-- 1. TIPOS DE DADOS E ESTRUTURAS
+
+-- Tipo base para um item
+data Item = Item {
+    itemID :: String,
+    nome :: String,
+    quantidade :: Int,
+    categoria :: String
+} deriving (Show, Read)
+
+-- O inventário é um mapa onde a chave é o itemID
+type Inventario = Map String Item
+
+-- Tipos para o Log de Auditoria (ADT)
+data AcaoLog 
+    = Add 
+    | Remove 
+    | Update 
+    | QueryFail 
+    | Report 
+    | List
+    | InitLoad 
+    | Exit 
+    deriving (Show, Read)
+
+data StatusLog 
+    = Sucesso 
+    | Falha String 
+    deriving (Show, Read)
+
+data LogEntry = LogEntry {
+    timestamp :: UTCTime,
+    acao :: AcaoLog,
+    detalhes :: String,
+    status :: StatusLog
+} deriving (Show, Read)
+
+-- Alias de tipo para o resultado de uma operação pura bem-sucedida
+type ResultadoOperacao = (Inventario, LogEntry)
+
+-- 2. FUNÇÕES PURAS DE NEGÓCIO
+
+-- Helpers para criação de LogEntry
+logSucesso :: UTCTime -> AcaoLog -> String -> LogEntry
+logSucesso time act det = LogEntry time act det Sucesso
+
+logFalha :: UTCTime -> AcaoLog -> String -> LogEntry
+logFalha time act det = LogEntry time act det (Falha det)
+
+-- Adiciona um novo item ao inventário.
+addItem :: UTCTime -> String -> String -> Int -> String -> Inventario -> Either String ResultadoOperacao
+addItem time iid nm qtd cat inv
+    | M.member iid inv = Left $ "Erro: ItemID '" ++ iid ++ "' ja existe no inventario."
+    | otherwise = 
+        let newItem = Item iid nm qtd cat
+            newInv = M.insert iid newItem inv
+            logE = logSucesso time Add $ "Adicionado: " ++ nm ++ " (ID: " ++ iid ++ ", Qtd: " ++ show qtd ++ ")"
+        in Right (newInv, logE)
+
+-- Remove uma quantidade do item.
+removeItem :: UTCTime -> String -> Int -> Inventario -> Either String ResultadoOperacao
+removeItem time iid qtdRemove inv =
+    case M.lookup iid inv of
+        Nothing -> Left $ "Erro: ItemID '" ++ iid ++ "' nao encontrado."
+        Just item
+            | qtdRemove <= 0 -> Left "Erro: Quantidade a remover deve ser positiva."
+            | quantidade item < qtdRemove -> 
+                Left $ "Erro: Estoque insuficiente. Item: " ++ nome item ++ " (" ++ show (quantidade item) ++ ") < Remocao: " ++ show qtdRemove
+            | otherwise ->
+                let newQty = quantidade item - qtdRemove
+                    updatedItem = item { quantidade = newQty }
+                    -- Remove o item se a quantidade for zero
+                    newInv = if newQty == 0 then M.delete iid inv else M.insert iid updatedItem inv
+                    logE = logSucesso time Remove $ "Removido: " ++ nome item ++ " (" ++ show qtdRemove ++ "). Novo estoque: " ++ show newQty
+                in Right (newInv, logE)
+
+-- Atualiza a quantidade (adicionando/subtraindo).
+updateQty :: UTCTime -> String -> Int -> Inventario -> Either String ResultadoOperacao
+updateQty time iid qtdDelta inv =
+    case M.lookup iid inv of
+        Nothing -> Left $ "Erro: ItemID '" ++ iid ++ "' nao encontrado para atualizar."
+        Just item
+            | qtdDelta == 0 -> Left "Erro: Quantidade de mudanca deve ser diferente de zero."
+            | quantidade item + qtdDelta < 0 ->
+                Left $ "Erro: Estoque insuficiente para remocao (" ++ show (abs qtdDelta) ++ "). Estoque atual: " ++ show (quantidade item)
+            | otherwise ->
+                let newQty = quantidade item + qtdDelta
+                    updatedItem = item { quantidade = newQty }
+                    newInv = if newQty == 0 then M.delete iid inv else M.insert iid updatedItem inv
+                    
+                    actionStr = if qtdDelta > 0 then "Adicionado" else "Removido"
+                    logE = logSucesso time Update $ actionStr ++ " em: " ++ nome item ++ " (" ++ show qtdDelta ++ "). Novo estoque: " ++ show newQty
+                in Right (newInv, logE)
+
+-- 3. FUNÇÕES PURAS DE RELATÓRIO
+
+-- Gera uma string de relatório de logs de erro
+logsDeErro :: [LogEntry] -> String
+logsDeErro logs = 
+    let erros = filter isFalha logs
+        isFalha log = case status log of 
+            Falha _ -> True
+            _       -> False
+        formatError log = 
+            let timeStr = formatTime defaultTimeLocale "%Y-%m-%d %H:%M:%S" (timestamp log)
+            in case status log of
+                Falha msg -> timeStr ++ " [" ++ show (acao log) ++ "]: FALHA - " ++ msg
+                _         -> ""
+    in "--- RELATORIO DE ERROS ---\n" ++ 
+       (if null erros then "Nenhum erro de log registrado.\n" else unlines (map formatError erros)) ++
+       "----------------------------"
+
+-- Gera uma string formatada para listar todos os itens
+listarInventario :: Inventario -> String
+listarInventario inv 
+    | M.null inv = "Inventario vazio."
+    | otherwise = 
+        let header = "ID   | Nome         | Qtd | Categoria"
+            sep    = "---|--------------|-----|----------"
+            formatItem item = 
+                let idStr = take 4 (itemID item) ++ replicate (4 - length (itemID item)) ' '
+                    nameStr = take 12 (nome item) ++ replicate (12 - length (nome item)) ' '
+                    qtyStr = show (quantidade item)
+                in idStr ++ " | " ++ nameStr ++ " | " ++ qtyStr ++ " | " ++ categoria item
+        in unlines (header : sep : map formatItem (M.elems inv))
+
+-- 4. FUNÇÕES DE I/O E PERSISTÊNCIA
+
 invFile :: FilePath
 invFile = "Inventario.dat"
 
 logFile :: FilePath
 logFile = "Auditoria.log"
 
--- ====================================================================
--- 1. TIPOS DE DADOS E ESTRUTURAS
--- ====================================================================
-
--- Tipo para representar um Item no inventário
-data Item = Item
-    { itemID :: String
-    , nome :: String
-    , quantidade :: Int
-    , categoria :: String
-    } deriving (Show, Read)
-
--- Tipo principal: O inventário é um mapa de ID para Item
-type Inventario = Map String Item
-
--- Tipos para o sistema de Logs
-data AcaoLog
-    = InitLoad
-    | Add
-    | Remove
-    | Update
-    | List
-    | Report
-    | QueryFail
-    | Exit
-    deriving (Show, Read)
-
-data StatusLog
-    = Sucesso
-    | Falha String
-    deriving (Show, Read)
-
-data LogEntry = LogEntry
-    { timestamp :: UTCTime
-    , acao :: AcaoLog
-    , detalhes :: String
-    , status :: StatusLog
-    } deriving (Show, Read)
-
-type ResultadoOperacao = (Inventario, LogEntry)
-
--- ====================================================================
--- 2. FUNÇÕES PURAS DE NEGÓCIO
--- ====================================================================
-
--- Helpers para criar logs
-logSucesso :: AcaoLog -> String -> ResultadoOperacao -> LogEntry
-logSucesso acao msg (inv, _) = LogEntry (timestamp (snd (inv, LogEntry {timestamp = undefined, acao = acao, detalhes = msg, status = Sucesso}))) acao msg Sucesso
-
-logFalha :: AcaoLog -> String -> String -> LogEntry
-logFalha acao detalhes msg = LogEntry (timestamp (snd (M.empty, LogEntry {timestamp = undefined, acao = acao, detalhes = detalhes, status = Falha msg}))) acao detalhes (Falha msg)
-
--- Adiciona um novo item ao inventário
-addItem :: Inventario -> Item -> AcaoLog -> Either String ResultadoOperacao
-addItem inv newItem acao =
-    case M.lookup (itemID newItem) inv of
-        Just _ -> Left $ "ItemID '" ++ itemID newItem ++ "' ja existe no inventario."
-        Nothing ->
-            let newInv = M.insert (itemID newItem) newItem inv
-                msg = "Adicionado: " ++ nome newItem ++ " (ID: " ++ itemID newItem ++ ", Qtd: " ++ show (quantidade newItem) ++ ")"
-                logE = LogEntry { timestamp = undefined, acao = acao, detalhes = msg, status = Sucesso }
-            in Right (newInv, logE)
-
--- Remove uma quantidade de um item
-removeItem :: Inventario -> String -> Int -> AcaoLog -> Either String ResultadoOperacao
-removeItem inv idToRemove qtd acao =
-    case M.lookup idToRemove inv of
-        Nothing -> Left $ "ItemID '" ++ idToRemove ++ "' nao encontrado para remocao."
-        Just item ->
-            let newQty = quantidade item - qtd
-                detalhesMsg = "Item: " ++ nome item ++ " (" ++ show (quantidade item) ++ ") < Remocao: " ++ show qtd ++ " (Comando: remove " ++ idToRemove ++ " " ++ show qtd ++ ")"
-            in if newQty < 0
-               then Left $ "Estoque insuficiente. " ++ detalhesMsg
-               else
-                   let newInv = if newQty == 0
-                                then M.delete idToRemove inv
-                                else M.insert idToRemove (item { quantidade = newQty }) inv
-                       msg = "Removido: " ++ show qtd ++ " de " ++ nome item ++ " (ID: " ++ idToRemove ++ "). Novo estoque: " ++ show newQty
-                       logE = LogEntry { timestamp = undefined, acao = acao, detalhes = msg, status = Sucesso }
-                   in Right (newInv, logE)
-
--- Atualiza a quantidade de um item (usa delta positivo ou negativo)
-updateQty :: Inventario -> String -> Int -> AcaoLog -> Either String ResultadoOperacao
-updateQty inv idToUpdate qtdDelta acao =
-    case M.lookup idToUpdate inv of
-        Nothing -> Left $ "ItemID '" ++ idToUpdate ++ "' nao encontrado para atualizar."
-        Just item ->
-            let newQty = quantidade item + qtdDelta
-                detalhesMsg = "Item: " ++ nome item ++ " (" ++ show (quantidade item) ++ ") | Delta: " ++ show qtdDelta
-            in if newQty < 0
-               then Left $ "Estoque insuficiente. " ++ detalhesMsg
-               else
-                   let newInv = M.insert idToUpdate (item { quantidade = newQty }) inv
-                       msg = "Atualizado: " ++ nome item ++ " (ID: " ++ idToUpdate ++ "). Delta: " ++ show qtdDelta ++ ". Novo estoque: " ++ show newQty
-                       logE = LogEntry { timestamp = undefined, acao = acao, detalhes = msg, status = Sucesso }
-                   in Right (newInv, logE)
-
--- ====================================================================
--- 3. FUNÇÕES PURAS DE RELATÓRIO
--- ====================================================================
-
-isFalha :: LogEntry -> Bool
-isFalha log = case status log of
-    Falha _ -> True
-    _       -> False
-
--- Filtra os logs para exibir apenas as falhas
-logsDeErro :: [LogEntry] -> String
-logsDeErro logs =
-    let erros = filter isFalha logs
-        formatError log =
-            case status log of
-                Falha msg -> show (timestamp log) ++ " [" ++ show (acao log) ++ "]: FALHA - " ++ detalhes log
-                _         -> ""
-    in unlines ("--- RELATORIO DE ERROS ---" : map formatError erros)
-
--- Formata o inventário para exibição na CLI
-listarInventario :: Inventario -> String
-listarInventario inv =
-    let header = "--- LISTAGEM DE INVENTARIO ---\n" ++ "ID   | Nome         | Qtd | Categoria\n" ++ "---|--------------|-----|----------"
-        items = M.elems inv
-        formatItem item =
-            let q = show (quantidade item)
-            in itemID item ++ replicate (5 - length (itemID item)) ' ' ++
-               "|" ++ nome item ++ replicate (13 - length (nome item)) ' ' ++
-               "|" ++ q ++ replicate (4 - length q) ' ' ++
-               "|" ++ categoria item
-    in unlines (header : map formatItem items) ++ "\n------------------------------"
-
--- ====================================================================
--- 4. FUNÇÕES DE I/O E PERSISTÊNCIA
--- ====================================================================
-
--- Tenta carregar o inventário do arquivo Inventario.dat
+-- Tenta carregar o Inventário do disco. Retorna Map.empty em falha.
 loadInventario :: IO Inventario
-loadInventario = catch
-    (do
-        content <- readFile invFile
-        case reads content of
-            [(inv, "")] -> return inv
-            _ -> do
-                putStrLn "Aviso: Falha na desserializacao de Inventario.dat. Iniciando vazio."
-                return M.empty
-    )
-    (\(e :: SomeException) -> do
-        putStrLn $ "Aviso: Nao foi possivel carregar " ++ invFile ++ ". Iniciando vazio. (Detalhe: " ++ show e ++ ")"
-        return M.empty
-    )
+loadInventario = do
+    result <- catch (Right <$> readFile invFile) 
+                    (\(e :: SomeException) -> return (Left $ show e))
+    case result of
+        Left err -> do
+            hPutStrLn stderr $ "Aviso: Nao foi possivel carregar " ++ invFile ++ ". Iniciando vazio. (Detalhe: " ++ err ++ ")"
+            return M.empty
+        Right content -> 
+            case reads content of
+                [(inv, "")] -> return inv
+                _ -> do
+                    hPutStrLn stderr $ "Aviso: Falha na desserializacao de " ++ invFile ++ ". Iniciando vazio."
+                    return M.empty
 
--- Tenta carregar os logs do Auditoria.log
+-- Tenta carregar os Logs do disco. Retorna [] em falha.
 loadLogs :: IO [LogEntry]
-loadLogs = catch
-    (do
-        content <- readFile logFile
-        -- Logs sao lidos linha por linha
-        let logLines = lines content
-        let parsedLogs = foldr (\line acc -> case reads line of
-                                            [(logEntry, "")] -> logEntry : acc
-                                            _ -> acc
-                              ) [] logLines
-        return parsedLogs
-    )
-    (\(e :: SomeException) -> do
-        hPutStrLn stderr $ "Aviso: Nao foi possivel carregar logs. (Detalhe: " ++ show e ++ ")"
-        return []
-    )
+loadLogs = do
+    result <- catch (Right <$> readFile logFile) 
+                    (\(e :: SomeException) -> return (Left $ show e))
+    case result of
+        Left err -> return []
+        Right content -> 
+            case reads content of
+                [(logs, "")] -> return logs
+                _ -> return []
 
--- Persiste o novo estado e o novo log (usado em operações de sucesso)
+
+-- Persiste o inventário (sobrescreve) e anexa a entrada de log.
 sincronizarSucesso :: Inventario -> LogEntry -> IO ()
 sincronizarSucesso inv logE = do
     writeFile invFile (show inv)
     appendFile logFile (show logE ++ "\n")
+    putStrLn $ "SUCESSO: " ++ detalhes logE
 
--- Registra um log de Falha ou Logs simples (List, Report)
+-- Apenas anexa a entrada de log (para falhas ou logs sem alteração de estado)
 registrarLog :: LogEntry -> IO ()
 registrarLog logE = do
     appendFile logFile (show logE ++ "\n")
+    case status logE of
+        Sucesso -> return () -- Evita exibir SUCESSO duas vezes
+        Falha msg -> putStrLn $ "FALHA: " ++ detalhes logE
 
--- Parser de comandos
+-- Parser de comandos de usuário
 parseComando :: String -> Either String (AcaoLog, [String])
-parseComando input =
-    let tokens = words input
-    in case tokens of
-        ["add", id, nome, qtdStr, cat] -> case reads qtdStr of
-            [(qtd, "")] | qtd > 0 -> Right (Add, [id, nome, show qtd, cat])
-            _ -> Left "Quantidade invalida ou negativa para 'add'."
-        ["remove", id, qtdStr] -> case reads qtdStr of
-            [(qtd, "")] | qtd > 0 -> Right (Remove, [id, show qtd])
-            _ -> Left "Quantidade invalida ou negativa para 'remove'."
-        ["update", id, qtdStr] -> case reads qtdStr of
-            [(qtd, "")] -> Right (Update, [id, show qtd])
-            _ -> Left "Quantidade invalida para 'update'."
-        ["list"]   -> Right (List, [])
-        ["report"] -> Right (Report, [])
-        ["exit"]   -> Right (Exit, [])
-        _          -> Left $ "Comando invalido. Formato esperado: add ID nome 10 categoria | remove ID 5 | update ID 3 | list | report | exit"
+parseComando input = 
+    case words input of
+        ("add":iid:nm:qtd:cat:[]) -> 
+            case reads qtd of
+                [(q, "")] | q > 0 -> Right (Add, [iid, nm, show q, cat])
+                _ -> Left "Quantidade invalida ou negativa para ADD."
+        ("remove":iid:qtd:[]) ->
+            case reads qtd of
+                [(q, "")] | q > 0 -> Right (Remove, [iid, show q])
+                _ -> Left "Quantidade invalida ou negativa para REMOVE."
+        ("update":iid:qtd:[]) ->
+            case reads qtd of
+                [(q, "")] | q /= 0 -> Right (Update, [iid, show q])
+                _ -> Left "Quantidade invalida (deve ser diferente de zero) para UPDATE."
+        ("list":[]) -> Right (List, [])
+        ("report":[]) -> Right (Report, [])
+        ("exit":[]) -> Right (Exit, [])
+        [] -> Left "Comando vazio."
+        _ -> Left "Comando invalido. Formato esperado: add ID nome 10 categoria | remove ID 5 | update ID 3 | list | report | exit"
 
--- ====================================================================
--- 5. LOOP PRINCIPAL E EXECUÇÃO
--- ====================================================================
 
--- Processa o resultado de uma função pura (sucesso ou falha)
-processaResultado :: UTCTime -> Inventario -> AcaoLog -> String -> Either String ResultadoOperacao -> IO (Inventario, [LogEntry])
-processaResultado time oldInv acao input result =
-    case result of
-        Right (newInv, logE) -> do
-            let finalLog = logE { timestamp = time }
-            putStrLn $ show (status finalLog) ++ ": " ++ detalhes finalLog
-            sincronizarSucesso newInv finalLog
-            return (newInv, [finalLog])
+-- 5. LOOP PRINCIPAL
 
-        Left errMsg -> do
-            let detalhesMsg = "Falha na logica: Erro: " ++ errMsg ++ " (Comando: " ++ input ++ ")"
-            let logE = logFalha acao detalhesMsg errMsg
-            let finalLog = logE { timestamp = time }
-            putStrLn $ "FALHA: " ++ detalhesMsg
-            registrarLog finalLog
-            return (oldInv, [finalLog])
-
--- Loop principal de I/O
 loop :: Inventario -> [LogEntry] -> IO ()
 loop inv logs = do
     putStrLn "\n--- Inventario CLI ---"
     putStrLn $ "Itens no Inventario: " ++ show (M.size inv) ++ " | Logs registrados: " ++ show (length logs)
     putStrLn "Comando (add, remove, update, list, report, exit): "
     input <- getLine
-    time <- getCurrentTime
-
-    let parsed = parseComando input
+    currentTime <- getCurrentTime
     
-    (newInv, newLogs) <- case parsed of
+    case parseComando input of
         Right (Exit, _) -> do
-            let logE = logSucesso Exit "Encerrando o programa. Estado persistido na ultima operacao." (inv, undefined)
-            let finalLog = logE { timestamp = time }
-            sincronizarSucesso inv finalLog
-            putStrLn "Sistema de Inventario encerrado."
-            return (inv, [finalLog])
+            let logE = logSucesso currentTime Exit "Encerrando o programa. Estado persistido na ultima operacao."
+            registrarLog logE
+            putStrLn "Programa encerrado."
 
         Right (Report, _) -> do
+            putStrLn ""
             putStrLn $ logsDeErro logs
-            let logE = logSucesso Report "Geracao de relatorio de erros." (inv, undefined)
-            let finalLog = logE { timestamp = time }
-            registrarLog finalLog
-            return (inv, [finalLog])
+            let logE = logSucesso currentTime Report "Geracao de relatorio de erros."
+            registrarLog logE
+            loop inv logs
 
         Right (List, _) -> do
+            putStrLn "\n--- LISTAGEM DE INVENTARIO ---"
             putStrLn $ listarInventario inv
-            let logE = logSucesso List "Listagem do inventario." (inv, undefined)
-            let finalLog = logE { timestamp = time }
-            registrarLog finalLog
-            return (inv, [finalLog])
+            putStrLn "------------------------------"
+            let logE = logSucesso currentTime List "Listagem do inventario."
+            registrarLog logE
+            loop inv logs
+        
+        -- Processamento de comandos de transação
+        Right (Add, [iid, nm, qtdStr, cat]) -> 
+            let qtd = read qtdStr :: Int
+                resultadoPuro = addItem currentTime iid nm qtd cat inv
+            in processaResultado inv logs resultadoPuro currentTime Add input
 
-        Right (Add, [id, name, qtdStr, cat]) ->
-            let qtd = read qtdStr
-                item = Item id name qtd cat
-            in processaResultado time inv Add input (addItem inv item Add)
+        Right (Remove, [iid, qtdStr]) -> 
+            let qtd = read qtdStr :: Int
+                resultadoPuro = removeItem currentTime iid qtd inv
+            in processaResultado inv logs resultadoPuro currentTime Remove input
 
-        Right (Remove, [id, qtdStr]) ->
-            let qtd = read qtdStr
-            in processaResultado time inv Remove input (removeItem inv id qtd Remove)
+        Right (Update, [iid, qtdStr]) -> 
+            let qtd = read qtdStr :: Int
+                resultadoPuro = updateQty currentTime iid qtd inv
+            in processaResultado inv logs resultadoPuro currentTime Update input
 
-        Right (Update, [id, qtdStr]) ->
-            let qtdDelta = read qtdStr
-            in processaResultado time inv Update input (updateQty inv id qtdDelta Update)
+        -- Captura qualquer outra combinação que não deveria ser possível
+        Right (action, _) -> do
+            let erroMsg = "Erro interno: Parametros incompativeis para a acao " ++ show action
+            putStrLn $ "ERRO INTERNO: " ++ erroMsg
+            let logE = logFalha currentTime QueryFail erroMsg
+            registrarLog logE
+            loop inv (logE:logs)
 
-        Left errMsg -> do
-            let detalhesMsg = "Comando invalido: " ++ input ++ ". Erro: " ++ errMsg
-            let logE = logFalha QueryFail detalhesMsg errMsg
-            let finalLog = logE { timestamp = time }
-            putStrLn $ "ERRO DE COMANDO: " ++ errMsg
-            registrarLog finalLog
-            return (inv, [finalLog])
+        Left erroMsg -> do
+            putStrLn $ "ERRO DE COMANDO: " ++ erroMsg
+            let logE = logFalha currentTime QueryFail $ "Comando invalido: " ++ input ++ ". Erro: " ++ erroMsg
+            registrarLog logE
+            loop inv (logE:logs)
 
-    -- Se o comando não for 'Exit', continua o loop
-    case parsed of
-        Right (Exit, _) -> return ()
-        _               -> loop newInv (logs ++ newLogs)
+-- Função auxiliar para processar o resultado do cálculo puro
+processaResultado :: Inventario -> [LogEntry] -> Either String ResultadoOperacao -> UTCTime -> AcaoLog -> String -> IO ()
+processaResultado oldInv oldLogs resultadoPuro currentTime action input = 
+    case resultadoPuro of
+        Right (newInv, logEntry) -> do
+            sincronizarSucesso newInv logEntry
+            loop newInv (logEntry:oldLogs)
+        Left erroLg -> do
+            let logE = logFalha currentTime action $ "Falha na logica: " ++ erroLg ++ " (Comando: " ++ input ++ ")"
+            registrarLog logE
+            loop oldInv (logE:oldLogs) -- Retorna ao loop com o inventário antigo
 
--- Função principal que inicializa o sistema
+-- 6. PONTO DE ENTRADA (main)
+
 main :: IO ()
 main = do
-    putStrLn "\nIniciando o Sistema de Inventario..."
-    -- Carregar estados anteriores
-    initialInv <- loadInventario
-    initialLogs <- loadLogs
-
-    putStrLn $ "Inventario: " ++ show (M.size initialInv) ++ " itens. Logs: " ++ show (length initialLogs)
-
-    -- Registrar o log de inicialização
-    time <- getCurrentTime
-    let initMsg = "Programa iniciado e estado carregado/inicializado."
-    let initLog = LogEntry { timestamp = time, acao = InitLoad, detalhes = initMsg, status = Sucesso }
-
-    registrarLog initLog
-
-    -- Iniciar o loop principal
-    loop initialInv (initialLogs ++ [initLog])
+    putStrLn "Iniciando o Sistema de Inventario..."
+    
+    -- Carregamento do estado anterior
+    inv <- loadInventario
+    logs <- loadLogs
+    
+    putStrLn $ "Inventario: " ++ show (M.size inv) ++ " itens. Logs: " ++ show (length logs) ++ " entradas."
+    
+    currentTime <- getCurrentTime
+    let initLog = logSucesso currentTime InitLoad "Programa iniciado e estado carregado/inicializado."
+    registrarLog initLog -- Registra o log de inicialização
+    
+    -- Inicia o loop principal
+    loop inv (initLog:logs)
